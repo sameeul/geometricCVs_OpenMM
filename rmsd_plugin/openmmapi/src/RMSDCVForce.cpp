@@ -38,16 +38,22 @@ using namespace RMSDCVPlugin;
 using namespace OpenMM;
 using namespace std;
 
-RMSDCVForce::RMSDCVForce(const vector<Vec3>& referencePositions, const vector<int>& particles) :
-        referencePositions(referencePositions), particles(particles) {
+RMSDCVForce::RMSDCVForce(const vector<Vec3>& referencePositions, const int* p, int p_sz) :
+        referencePositions(referencePositions) {
+            for(int i; i< p_sz; ++i){
+                particles.emplace_back(p[i]);
+            }
 }
 
 void RMSDCVForce::setReferencePositions(const std::vector<Vec3>& positions) {
     referencePositions = positions;
 }
 
-void RMSDCVForce::setParticles(const std::vector<int>& particles) {
-    this->particles = particles;
+void RMSDCVForce::setParticles(const int* p, int p_sz) {
+    particles.clear();
+    for(int i; i< p_sz; ++i){
+        particles.emplace_back(p[i]);
+    }
 }
 
 void RMSDCVForce::updateParametersInContext(Context& context) {

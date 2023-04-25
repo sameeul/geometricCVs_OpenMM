@@ -85,7 +85,7 @@ void testRMSDCV() {
         if (i%5 != 0)
             particles.push_back(i);
     }
-    RMSDCVForce* force = new RMSDCVForce(referencePos, particles);
+    RMSDCVForce* force = new RMSDCVForce(referencePos, particles.data(), particles.size());
     system.addForce(force);
     VerletIntegrator integrator(0.001);
     Context context(system, integrator, platform);
@@ -151,12 +151,13 @@ void testRMSDCV() {
     for (int i = 0; i < numParticles; i++)
         allParticles.push_back(i);
     estimate = estimateRMSDCV(positions, referencePos, allParticles);
-    force->setParticles(allParticles);
+    force->setParticles(allParticles.data(), allParticles.size());
     force->setReferencePositions(referencePos);
     force->updateParametersInContext(context);
     context.setPositions(positions);
     double RMSDCV1 = context.getState(State::Energy).getPotentialEnergy();
-    force->setParticles(vector<int>());
+    auto tmp_vec_int = vector<int>();
+    force->setParticles(tmp_vec_int.data(), tmp_vec_int.size());
     force->updateParametersInContext(context);
     double RMSDCV2 = context.getState(State::Energy).getPotentialEnergy();
     ASSERT_EQUAL_TOL(RMSDCV1, RMSDCV2, 1e-4);

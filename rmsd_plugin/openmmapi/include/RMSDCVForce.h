@@ -68,7 +68,7 @@ public:
      *                            particles in the system will be used.
      */
     explicit RMSDCVForce(const std::vector<Vec3>& referencePositions,
-                       const std::vector<int>& particles=std::vector<int>());
+                       const int* p, int p_sz);
     /**
      * Get the reference positions to compute the deviation from.
      */
@@ -90,7 +90,7 @@ public:
      * Set the indices of the particles to use when computing the RMSDCV.  If this
      * is empty, all particles in the system will be used.
      */
-    void setParticles(const std::vector<int>& particles);
+    void setParticles(const int* p, int p_sz);
     /**
      * Update the reference positions and particle indices in a Context to match those stored
      * in this Force object.  This method provides an efficient method to update certain parameters

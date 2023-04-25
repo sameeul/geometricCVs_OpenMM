@@ -51,7 +51,7 @@ void testSerialization() {
     vector<int> particles;
     for (int i = 0; i < 5; i++)
         particles.push_back(i*i);
-    RMSDCVForce force(refPos, particles);
+    RMSDCVForce force(refPos, particles.data(),particles.size());
     force.setForceGroup(3);
 
     // Serialize and then deserialize it.

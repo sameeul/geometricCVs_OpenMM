@@ -64,7 +64,7 @@ void* RMSDCVForceProxy::deserialize(const SerializationNode& node) const {
         vector<int> particles;
         for (auto& particle : node.getChildNode("Particles").getChildren())
             particles.push_back(particle.getIntProperty("index"));
-        force = new RMSDCVForce(positions, particles);
+        force = new RMSDCVForce(positions, particles.data(), particles.size());
         force->setForceGroup(node.getIntProperty("forceGroup", 0));
         return force;
     }
