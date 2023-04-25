@@ -1,6 +1,3 @@
-#ifndef REFERENCE_RMSDCV_KERNELS_H_
-#define REFERENCE_RMSDCV_KERNELS_H_
-
 /* -------------------------------------------------------------------------- *
  *                                   OpenMM                                   *
  * -------------------------------------------------------------------------- *
@@ -32,62 +29,31 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "RMSDCVKernels.h"
-#include "openmm/Platform.h"
-#include <vector>
+#include "QuaternionForce.h"
+#include "internal/QuaternionForceImpl.h"
+#include "openmm/OpenMMException.h"
+#include "openmm/internal/AssertionUtilities.h"
 
-namespace RMSDCVPlugin {
+using namespace QuaternionPlugin;
+using namespace OpenMM;
+using namespace std;
 
-class ReferenceCalcRMSDCVForceKernel : public CalcRMSDCVForceKernel {
+QuaternionForce::QuaternionForce(const vector<Vec3>& referencePositions, const vector<int>& particles) :
+        referencePositions(referencePositions), particles(particles) {
+}
 
-public:
-    /**
-     * Constructor
-     */
-    ReferenceCalcRMSDCVForceKernel(std::string name, const OpenMM::Platform& platform) : CalcRMSDCVForceKernel(name, platform) {
-    }
-      /**
-     * Destructor
-     */
-    ~ReferenceCalcRMSDCVForceKernel();
+void QuaternionForce::setReferencePositions(const std::vector<Vec3>& positions) {
+    referencePositions = positions;
+}
 
- /**
-     * Initialize the kernel.
-     * 
-     * @param system     the System this kernel will be applied to
-     * @param force      the RMSDCVForce this kernel will be used for
-     */
-    void initialize(const OpenMM::System& system, const RMSDCVForce& force);
-    /**
-     * Execute the kernel to calculate the forces and/or energy.
-     *
-     * @param context        the context in which to execute this kernel
-     * @param includeForces  true if forces should be calculated
-     * @param includeEnergy  true if the energy should be calculated
-     * @return the potential energy due to the force
-     */
-    double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
-    /**
-     * Copy changed parameters over to a context.
-     *
-     * @param context    the context to copy parameters to
-     * @param force      the RMSDCVForce to copy the parameters from
-     */
-    void copyParametersToContext(OpenMM::ContextImpl& context, const RMSDCVForce& force);
-       /**
-     * Calculate the interaction.
-     * 
-     * @param atomCoordinates    atom coordinates
-     * @param forces             the forces are added to this
-     * @return the energy of the interaction
-     */
-   double calculateIxn(std::vector<OpenMM::Vec3>& atomCoordinates, std::vector<OpenMM::Vec3>& forces) const;
-private:
-    std::vector<OpenMM::Vec3> referencePos;
-    std::vector<int> particles;
-};
+void QuaternionForce::setParticles(const std::vector<int>& particles) {
+    this->particles = particles;
+}
 
-} // namespace RMSDCVPlugin
+void QuaternionForce::updateParametersInContext(Context& context) {
+    dynamic_cast<QuaternionForceImpl&>(getImplInContext(context)).updateParametersInContext(getContextImpl(context));
+}
 
-#endif // __ReferenceCalcRMSDCVForceKernel_H__
-
+ForceImpl* QuaternionForce::createImpl() const {
+    return new QuaternionForceImpl(*this);
+}

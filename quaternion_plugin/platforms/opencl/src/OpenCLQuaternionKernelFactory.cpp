@@ -1,8 +1,5 @@
-#ifndef REFERENCE_RMSDCV_KERNELS_H_
-#define REFERENCE_RMSDCV_KERNELS_H_
-
 /* -------------------------------------------------------------------------- *
- *                                   OpenMM                                   *
+ *                              OpenMMQuaternion                                   *
  * -------------------------------------------------------------------------- *
  * This is part of the OpenMM molecular simulation toolkit originating from   *
  * Simbios, the NIH National Center for Physics-Based Simulation of           *
@@ -32,62 +29,45 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "RMSDCVKernels.h"
-#include "openmm/Platform.h"
-#include <vector>
+#include <exception>
 
-namespace RMSDCVPlugin {
+#include "OpenCLQuaternionKernelFactory.h"
+#include "CommonQuaternionKernels.h"
+#include "openmm/opencl/OpenCLContext.h"
+#include "openmm/internal/windowsExport.h"
+#include "openmm/internal/ContextImpl.h"
+#include "openmm/OpenMMException.h"
 
-class ReferenceCalcRMSDCVForceKernel : public CalcRMSDCVForceKernel {
+using namespace QuaternionPlugin;
+using namespace OpenMM;
 
-public:
-    /**
-     * Constructor
-     */
-    ReferenceCalcRMSDCVForceKernel(std::string name, const OpenMM::Platform& platform) : CalcRMSDCVForceKernel(name, platform) {
+extern "C" OPENMM_EXPORT void registerPlatforms() {
+}
+
+extern "C" OPENMM_EXPORT void registerKernelFactories() {
+    try {
+        Platform& platform = Platform::getPlatformByName("OpenCL");
+        OpenCLQuaternionKernelFactory* factory = new OpenCLQuaternionKernelFactory();
+        platform.registerKernelFactory(CalcQuaternionForceKernel::Name(), factory);
     }
-      /**
-     * Destructor
-     */
-    ~ReferenceCalcRMSDCVForceKernel();
+    catch (std::exception ex) {
+        // Ignore
+    }
+}
 
- /**
-     * Initialize the kernel.
-     * 
-     * @param system     the System this kernel will be applied to
-     * @param force      the RMSDCVForce this kernel will be used for
-     */
-    void initialize(const OpenMM::System& system, const RMSDCVForce& force);
-    /**
-     * Execute the kernel to calculate the forces and/or energy.
-     *
-     * @param context        the context in which to execute this kernel
-     * @param includeForces  true if forces should be calculated
-     * @param includeEnergy  true if the energy should be calculated
-     * @return the potential energy due to the force
-     */
-    double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
-    /**
-     * Copy changed parameters over to a context.
-     *
-     * @param context    the context to copy parameters to
-     * @param force      the RMSDCVForce to copy the parameters from
-     */
-    void copyParametersToContext(OpenMM::ContextImpl& context, const RMSDCVForce& force);
-       /**
-     * Calculate the interaction.
-     * 
-     * @param atomCoordinates    atom coordinates
-     * @param forces             the forces are added to this
-     * @return the energy of the interaction
-     */
-   double calculateIxn(std::vector<OpenMM::Vec3>& atomCoordinates, std::vector<OpenMM::Vec3>& forces) const;
-private:
-    std::vector<OpenMM::Vec3> referencePos;
-    std::vector<int> particles;
-};
+extern "C" OPENMM_EXPORT void registerQuaternionOpenCLKernelFactories() {
+    try {
+        Platform::getPlatformByName("OpenCL");
+    }
+    catch (...) {
+        Platform::registerPlatform(new OpenCLPlatform());
+    }
+    registerKernelFactories();
+}
 
-} // namespace RMSDCVPlugin
-
-#endif // __ReferenceCalcRMSDCVForceKernel_H__
-
+KernelImpl* OpenCLQuaternionKernelFactory::createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const {
+    OpenCLContext& cl = *static_cast<OpenCLPlatform::PlatformData*>(context.getPlatformData())->contexts[0];
+    if (name == CalcQuaternionForceKernel::Name())
+        return new CommonCalcQuaternionForceKernel(name, platform, cl, context.getSystem());
+    throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());
+}

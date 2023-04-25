@@ -1,8 +1,5 @@
-#ifndef REFERENCE_RMSDCV_KERNELS_H_
-#define REFERENCE_RMSDCV_KERNELS_H_
-
 /* -------------------------------------------------------------------------- *
- *                                   OpenMM                                   *
+ *                                OpenMMQuaternion                                 *
  * -------------------------------------------------------------------------- *
  * This is part of the OpenMM molecular simulation toolkit originating from   *
  * Simbios, the NIH National Center for Physics-Based Simulation of           *
@@ -32,62 +29,58 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "RMSDCVKernels.h"
+#include "QuaternionForce.h"
 #include "openmm/Platform.h"
-#include <vector>
+#include "openmm/internal/AssertionUtilities.h"
+#include "openmm/serialization/XmlSerializer.h"
+#include <iostream>
+#include <sstream>
 
-namespace RMSDCVPlugin {
+using namespace QuaternionPlugin;
+using namespace OpenMM;
+using namespace std;
 
-class ReferenceCalcRMSDCVForceKernel : public CalcRMSDCVForceKernel {
+extern "C" void registerQuaternionSerializationProxies();
 
-public:
-    /**
-     * Constructor
-     */
-    ReferenceCalcRMSDCVForceKernel(std::string name, const OpenMM::Platform& platform) : CalcRMSDCVForceKernel(name, platform) {
+void testSerialization() {
+    // Create a Force.
+
+    vector<Vec3> refPos;
+    for (int i = 0; i < 10; i++)
+        refPos.push_back(Vec3(i/5.0, i*1.2, i*i/3.5));
+    vector<int> particles;
+    for (int i = 0; i < 5; i++)
+        particles.push_back(i*i);
+    QuaternionForce force(refPos, particles);
+    force.setForceGroup(3);
+
+    // Serialize and then deserialize it.
+
+    stringstream buffer;
+    XmlSerializer::serialize<QuaternionForce>(&force, "Force", buffer);
+    QuaternionForce* copy = XmlSerializer::deserialize<QuaternionForce>(buffer);
+
+    // Compare the two forces to see if they are identical.
+
+    QuaternionForce& force2 = *copy;
+    ASSERT_EQUAL(force.getForceGroup(), force2.getForceGroup());
+    ASSERT_EQUAL(force.getReferencePositions().size(), force2.getReferencePositions().size());
+    for (int i = 0; i < force.getReferencePositions().size(); i++)
+        ASSERT_EQUAL_VEC(force.getReferencePositions()[i], force2.getReferencePositions()[i], 0.0);
+    ASSERT_EQUAL(force.getParticles().size(), force2.getParticles().size());
+    for (int i = 0; i < force.getParticles().size(); i++)
+        ASSERT_EQUAL(force.getParticles()[i], force2.getParticles()[i]);
+}
+
+int main() {
+    try {
+        registerQuaternionSerializationProxies();
+        testSerialization();
     }
-      /**
-     * Destructor
-     */
-    ~ReferenceCalcRMSDCVForceKernel();
-
- /**
-     * Initialize the kernel.
-     * 
-     * @param system     the System this kernel will be applied to
-     * @param force      the RMSDCVForce this kernel will be used for
-     */
-    void initialize(const OpenMM::System& system, const RMSDCVForce& force);
-    /**
-     * Execute the kernel to calculate the forces and/or energy.
-     *
-     * @param context        the context in which to execute this kernel
-     * @param includeForces  true if forces should be calculated
-     * @param includeEnergy  true if the energy should be calculated
-     * @return the potential energy due to the force
-     */
-    double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
-    /**
-     * Copy changed parameters over to a context.
-     *
-     * @param context    the context to copy parameters to
-     * @param force      the RMSDCVForce to copy the parameters from
-     */
-    void copyParametersToContext(OpenMM::ContextImpl& context, const RMSDCVForce& force);
-       /**
-     * Calculate the interaction.
-     * 
-     * @param atomCoordinates    atom coordinates
-     * @param forces             the forces are added to this
-     * @return the energy of the interaction
-     */
-   double calculateIxn(std::vector<OpenMM::Vec3>& atomCoordinates, std::vector<OpenMM::Vec3>& forces) const;
-private:
-    std::vector<OpenMM::Vec3> referencePos;
-    std::vector<int> particles;
-};
-
-} // namespace RMSDCVPlugin
-
-#endif // __ReferenceCalcRMSDCVForceKernel_H__
-
+    catch(const exception& e) {
+        cout << "exception: " << e.what() << endl;
+        return 1;
+    }
+    cout << "Done" << endl;
+    return 0;
+}

@@ -1,8 +1,8 @@
-%module RMSDCVplugin
+%module Quaternionplugin
 %include "factory.i"
 
 %{
-#include "RMSDCVForce.h"
+#include "QuaternionForce.h"
 #include "OpenMM.h"
 #include "OpenMMAmoeba.h"
 #include "OpenMMDrude.h"
@@ -18,7 +18,6 @@
 %include "std_vector.i"
 %include "typemaps.i"
 %include "header.i"
-%include "numpy.i"
 
 %import(module="openmm") "swig/OpenMMSwigHeaders.i"
 %include "swig/typemaps.i"
@@ -47,7 +46,7 @@ import simtk.unit as unit
  * Add units to function outputs.
 */
 
-%pythonappend RMSDCVPlugin::RMSDCVForce::getReferencePositions() const %{
+%pythonappend QuaternionPlugin::QuaternionForce::getReferencePositions() const %{
     val = unit.Quantity(val, unit.nanometer)
 %}
 
@@ -90,16 +89,14 @@ import simtk.unit as unit
     }
 }
 
-namespace RMSDCVPlugin {
+namespace QuaternionPlugin {
 
-class RMSDCVForce : public OpenMM::Force {
+class QuaternionForce : public OpenMM::Force {
 public:
-    %apply (int* IN_ARRAY1, int DIM1) {(const int* p, int p_sz)};
-    RMSDCVForce(const std::vector<Vec3> &referencePositions, const int* p, int p_sz);
-    void setParticles(const int* p, int p_sz);    
-    %clear (const int* p, int p_sz);
-    virtual bool usesPeriodicBoundaryConditions() const;
 
+    QuaternionForce(const std::vector<Vec3> &referencePositions, const std::vector<int> &particles=std::vector<int>());
+    virtual bool usesPeriodicBoundaryConditions() const;
+    void setParticles(const std::vector<int> &particles);    
     void setReferencePositions(const std::vector<Vec3> &positions);
     %apply OpenMM::Context & OUTPUT {OpenMM::Context & context };    
     void updateParametersInContext(OpenMM::Context& context);
@@ -110,15 +107,15 @@ public:
 
 
    /*
-     * Add methods for casting a Force to an RMSDCVForce.
+     * Add methods for casting a Force to an QuaternionForce.
     */
     %extend {
-        static RMSDCVPlugin::RMSDCVForce& cast(OpenMM::Force& force) {
-            return dynamic_cast<RMSDCVPlugin::RMSDCVForce&>(force);
+        static QuaternionPlugin::QuaternionForce& cast(OpenMM::Force& force) {
+            return dynamic_cast<QuaternionPlugin::QuaternionForce&>(force);
         }
 
         static bool isinstance(OpenMM::Force& force) {
-            return (dynamic_cast<RMSDCVPlugin::RMSDCVForce*>(&force) != NULL);
+            return (dynamic_cast<QuaternionPlugin::QuaternionForce*>(&force) != NULL);
         }
     }
 

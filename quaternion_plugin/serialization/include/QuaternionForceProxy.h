@@ -1,8 +1,8 @@
-#ifndef REFERENCE_RMSDCV_KERNELS_H_
-#define REFERENCE_RMSDCV_KERNELS_H_
+#ifndef OPENMM_Quaternion_FORCE_PROXY_H_
+#define OPENMM_Quaternion_FORCE_PROXY_H_
 
 /* -------------------------------------------------------------------------- *
- *                                   OpenMM                                   *
+ *                                OpenMMQuaternion                                 *
  * -------------------------------------------------------------------------- *
  * This is part of the OpenMM molecular simulation toolkit originating from   *
  * Simbios, the NIH National Center for Physics-Based Simulation of           *
@@ -32,62 +32,22 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "RMSDCVKernels.h"
-#include "openmm/Platform.h"
-#include <vector>
+#include "internal/windowsExportQuaternion.h"
+#include "openmm/serialization/SerializationProxy.h"
 
-namespace RMSDCVPlugin {
+namespace OpenMM {
 
-class ReferenceCalcRMSDCVForceKernel : public CalcRMSDCVForceKernel {
+/**
+ * This is a proxy for serializing QuaternionForce objects.
+ */
 
+class OPENMM_EXPORT_Quaternion QuaternionForceProxy : public SerializationProxy {
 public:
-    /**
-     * Constructor
-     */
-    ReferenceCalcRMSDCVForceKernel(std::string name, const OpenMM::Platform& platform) : CalcRMSDCVForceKernel(name, platform) {
-    }
-      /**
-     * Destructor
-     */
-    ~ReferenceCalcRMSDCVForceKernel();
-
- /**
-     * Initialize the kernel.
-     * 
-     * @param system     the System this kernel will be applied to
-     * @param force      the RMSDCVForce this kernel will be used for
-     */
-    void initialize(const OpenMM::System& system, const RMSDCVForce& force);
-    /**
-     * Execute the kernel to calculate the forces and/or energy.
-     *
-     * @param context        the context in which to execute this kernel
-     * @param includeForces  true if forces should be calculated
-     * @param includeEnergy  true if the energy should be calculated
-     * @return the potential energy due to the force
-     */
-    double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
-    /**
-     * Copy changed parameters over to a context.
-     *
-     * @param context    the context to copy parameters to
-     * @param force      the RMSDCVForce to copy the parameters from
-     */
-    void copyParametersToContext(OpenMM::ContextImpl& context, const RMSDCVForce& force);
-       /**
-     * Calculate the interaction.
-     * 
-     * @param atomCoordinates    atom coordinates
-     * @param forces             the forces are added to this
-     * @return the energy of the interaction
-     */
-   double calculateIxn(std::vector<OpenMM::Vec3>& atomCoordinates, std::vector<OpenMM::Vec3>& forces) const;
-private:
-    std::vector<OpenMM::Vec3> referencePos;
-    std::vector<int> particles;
+    QuaternionForceProxy();
+    void serialize(const void* object, SerializationNode& node) const;
+    void* deserialize(const SerializationNode& node) const;
 };
 
-} // namespace RMSDCVPlugin
+} // namespace OpenMM
 
-#endif // __ReferenceCalcRMSDCVForceKernel_H__
-
+#endif /*OPENMM_Quaternion_FORCE_PROXY_H_*/

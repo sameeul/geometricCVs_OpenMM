@@ -1,6 +1,3 @@
-#ifndef REFERENCE_RMSDCV_KERNELS_H_
-#define REFERENCE_RMSDCV_KERNELS_H_
-
 /* -------------------------------------------------------------------------- *
  *                                   OpenMM                                   *
  * -------------------------------------------------------------------------- *
@@ -32,62 +29,69 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "RMSDCVKernels.h"
-#include "openmm/Platform.h"
-#include <vector>
+#ifdef WIN32
+  #define _USE_MATH_DEFINES // Needed to get M_PI
+#endif
+#include "internal/QuaternionForceImpl.h"
+#include "QuaternionKernels.h"
+#include "openmm/OpenMMException.h"
+#include "openmm/internal/ContextImpl.h"
+#include <cmath>
+#include <map>
+#include <set>
+#include <sstream>
 
-namespace RMSDCVPlugin {
+using namespace QuaternionPlugin;
+using namespace OpenMM;
+using namespace std;
 
-class ReferenceCalcRMSDCVForceKernel : public CalcRMSDCVForceKernel {
+QuaternionForceImpl::QuaternionForceImpl(const QuaternionForce& owner) : owner(owner) {
+}
 
-public:
-    /**
-     * Constructor
-     */
-    ReferenceCalcRMSDCVForceKernel(std::string name, const OpenMM::Platform& platform) : CalcRMSDCVForceKernel(name, platform) {
+QuaternionForceImpl::~QuaternionForceImpl() {
+}
+
+void QuaternionForceImpl::initialize(ContextImpl& context) {
+    kernel = context.getPlatform().createKernel(CalcQuaternionForceKernel::Name(), context);
+
+    // Check for errors in the specification of particles.
+    const System& system = context.getSystem();
+    int numParticles = system.getNumParticles();
+    if (owner.getReferencePositions().size() != numParticles)
+        throw OpenMMException("QuaternionForce: Number of reference positions does not equal number of particles in the System");
+    set<int> particles;
+    for (int i : owner.getParticles()) {
+        if (i < 0 || i >= numParticles) {
+            stringstream msg;
+            msg << "QuaternionForce: Illegal particle index for Quaternion: ";
+            msg << i;
+            throw OpenMMException(msg.str());
+        }
+        if (particles.find(i) != particles.end()) {
+            stringstream msg;
+            msg << "QuaternionForce: Duplicated particle index for Quaternion: ";
+            msg << i;
+            throw OpenMMException(msg.str());
+        }
+        particles.insert(i);
     }
-      /**
-     * Destructor
-     */
-    ~ReferenceCalcRMSDCVForceKernel();
+    kernel.getAs<CalcQuaternionForceKernel>().initialize(context.getSystem(), owner);
+}
 
- /**
-     * Initialize the kernel.
-     * 
-     * @param system     the System this kernel will be applied to
-     * @param force      the RMSDCVForce this kernel will be used for
-     */
-    void initialize(const OpenMM::System& system, const RMSDCVForce& force);
-    /**
-     * Execute the kernel to calculate the forces and/or energy.
-     *
-     * @param context        the context in which to execute this kernel
-     * @param includeForces  true if forces should be calculated
-     * @param includeEnergy  true if the energy should be calculated
-     * @return the potential energy due to the force
-     */
-    double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
-    /**
-     * Copy changed parameters over to a context.
-     *
-     * @param context    the context to copy parameters to
-     * @param force      the RMSDCVForce to copy the parameters from
-     */
-    void copyParametersToContext(OpenMM::ContextImpl& context, const RMSDCVForce& force);
-       /**
-     * Calculate the interaction.
-     * 
-     * @param atomCoordinates    atom coordinates
-     * @param forces             the forces are added to this
-     * @return the energy of the interaction
-     */
-   double calculateIxn(std::vector<OpenMM::Vec3>& atomCoordinates, std::vector<OpenMM::Vec3>& forces) const;
-private:
-    std::vector<OpenMM::Vec3> referencePos;
-    std::vector<int> particles;
-};
+double QuaternionForceImpl::calcForcesAndEnergy(ContextImpl& context, bool includeForces, bool includeEnergy, int groups) {
+    if ((groups&(1<<owner.getForceGroup())) != 0)
+        return kernel.getAs<CalcQuaternionForceKernel>().execute(context, includeForces, includeEnergy);
+    return 0.0;
+}
 
-} // namespace RMSDCVPlugin
+vector<string> QuaternionForceImpl::getKernelNames() {
+    vector<string> names;
+    names.push_back(CalcQuaternionForceKernel::Name());
+    return names;
+}
 
-#endif // __ReferenceCalcRMSDCVForceKernel_H__
+void QuaternionForceImpl::updateParametersInContext(ContextImpl& context) {
+    kernel.getAs<CalcQuaternionForceKernel>().copyParametersToContext(context, owner);
+    context.systemChanged();
+}
 

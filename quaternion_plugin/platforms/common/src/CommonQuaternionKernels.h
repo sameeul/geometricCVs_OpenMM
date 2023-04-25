@@ -1,5 +1,5 @@
-#ifndef REFERENCE_RMSDCV_KERNELS_H_
-#define REFERENCE_RMSDCV_KERNELS_H_
+#ifndef COMMON_Quaternion_KERNELS_H_
+#define COMMON_Quaternion_KERNELS_H_
 
 /* -------------------------------------------------------------------------- *
  *                                   OpenMM                                   *
@@ -9,7 +9,7 @@
  * Biological Structures at Stanford, funded under the NIH Roadmap for        *
  * Medical Research, grant U54 GM072970. See https://simtk.org.               *
  *                                                                            *
- * Portions copyright (c) 2014 Stanford University and the Authors.           *
+ * Portions copyright (c) 2014-2021 Stanford University and the Authors.      *
  * Authors: Peter Eastman                                                     *
  * Contributors:                                                              *
  *                                                                            *
@@ -32,32 +32,56 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "RMSDCVKernels.h"
-#include "openmm/Platform.h"
-#include <vector>
+#include "QuaternionKernels.h"
+#include "openmm/common/ComputeContext.h"
+#include "openmm/common/ComputeArray.h"
+#include <set>
 
-namespace RMSDCVPlugin {
-
-class ReferenceCalcRMSDCVForceKernel : public CalcRMSDCVForceKernel {
-
+using namespace std;
+namespace QuaternionPlugin {
+class CommonQuaternionForceInfo : public ComputeForceInfo {
 public:
-    /**
-     * Constructor
-     */
-    ReferenceCalcRMSDCVForceKernel(std::string name, const OpenMM::Platform& platform) : CalcRMSDCVForceKernel(name, platform) {
+    CommonQuaternionForceInfo(const QuaternionForce& force) : force(force) {
+        updateParticles();
     }
-      /**
-     * Destructor
-     */
-    ~ReferenceCalcRMSDCVForceKernel();
+    void updateParticles() {
+        particles.clear();
+        for (int i : force.getParticles())
+            particles.insert(i);
+    }
+    bool areParticlesIdentical(int particle1, int particle2) {
+        bool include1 = (particles.find(particle1) != particles.end());
+        bool include2 = (particles.find(particle2) != particles.end());
+        return (include1 == include2);
+    }
+private:
+    const QuaternionForce& force;
+    set<int> particles;
+};
+};
+namespace QuaternionPlugin {
 
+/**
+ * This kernel is invoked by QuaternionForce to calculate the forces acting on the system and the energy of the system.
+ */
+class CommonCalcQuaternionForceKernel : public CalcQuaternionForceKernel {
+public:
+    CommonCalcQuaternionForceKernel(std::string name, const OpenMM::Platform& platform, OpenMM::ComputeContext& cc, const OpenMM::System& system) :
+            CalcQuaternionForceKernel(name, platform), hasInitializedKernel(false), cc(cc), system(system) {
+    }
+
+    
  /**
      * Initialize the kernel.
-     * 
+     *
      * @param system     the System this kernel will be applied to
-     * @param force      the RMSDCVForce this kernel will be used for
+     * @param force      the QuaternionForce this kernel will be used for
      */
-    void initialize(const OpenMM::System& system, const RMSDCVForce& force);
+    void initialize(const System& system, const QuaternionForce& force);
+    /**
+     * Record the reference positions and particle indices.
+     */
+    void recordParameters(const QuaternionForce& force);
     /**
      * Execute the kernel to calculate the forces and/or energy.
      *
@@ -68,26 +92,30 @@ public:
      */
     double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
     /**
+     * This is the internal implementation of execute(), templatized on whether we're
+     * using single or double precision.
+     */
+    template <class REAL>
+    double executeImpl(OpenMM::ContextImpl& context);
+    /**
      * Copy changed parameters over to a context.
      *
      * @param context    the context to copy parameters to
-     * @param force      the RMSDCVForce to copy the parameters from
+     * @param force      the QuaternionForce to copy the parameters from
      */
-    void copyParametersToContext(OpenMM::ContextImpl& context, const RMSDCVForce& force);
-       /**
-     * Calculate the interaction.
-     * 
-     * @param atomCoordinates    atom coordinates
-     * @param forces             the forces are added to this
-     * @return the energy of the interaction
-     */
-   double calculateIxn(std::vector<OpenMM::Vec3>& atomCoordinates, std::vector<OpenMM::Vec3>& forces) const;
+    void copyParametersToContext(OpenMM::ContextImpl& context, const QuaternionForce& force);    
 private:
-    std::vector<OpenMM::Vec3> referencePos;
-    std::vector<int> particles;
+    bool hasInitializedKernel;
+    OpenMM::ComputeContext& cc;
+    const OpenMM::System& system;
+    int blockSize;
+    double sumNormRef;
+    OpenMM::ComputeArray referencePos, particles, buffer;
+    OpenMM::ComputeKernel kernel1, kernel2;
+    CommonQuaternionForceInfo* info;
+
 };
 
-} // namespace RMSDCVPlugin
+} // namespace QuaternionPlugin
 
-#endif // __ReferenceCalcRMSDCVForceKernel_H__
-
+#endif /*COMMON_Quaternion_KERNELS_H_*/

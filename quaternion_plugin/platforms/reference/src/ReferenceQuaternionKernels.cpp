@@ -29,17 +29,18 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "ReferenceRMSDCVKernels.h"
-#include "RMSDCVForce.h"
+#include "ReferenceQuaternionKernels.h"
+#include "QuaternionForce.h"
 #include "openmm/OpenMMException.h"
 #include "openmm/internal/ContextImpl.h"
 #include "openmm/reference/RealVec.h"
 #include "openmm/reference/ReferencePlatform.h"
-
 #include "openmm/Vec3.h"
-#include "jama_eig.h"
 
-using namespace RMSDCVPlugin;
+#include "jama_eig.h"
+#include "Quaternion.h"
+
+using namespace QuaternionPlugin;
 using namespace OpenMM;
 using namespace std;
 
@@ -53,11 +54,35 @@ static vector<RealVec>& extractForces(ContextImpl& context) {
     return *((vector<RealVec>*) data->forces);
 }
 
-ReferenceCalcRMSDCVForceKernel::~ReferenceCalcRMSDCVForceKernel() {
+ReferenceCalcQuaternionForceKernel::~ReferenceCalcQuaternionForceKernel() {
 }
 
-void ReferenceCalcRMSDCVForceKernel::initialize(const System& system, const RMSDCVForce& force) {
-   
+
+Vec3 calculateCOG(const std::vector<Vec3> pos)
+{
+    Vec3 cog = Vec3(0,0,0);
+    for (unsigned i=0; i<pos.size(); i++)
+            cog += pos[i];
+    cog /= pos.size();
+    return cog;
+}
+
+std::vector<Vec3> translateCoordinates(const std::vector<Vec3> pos, const Vec3 t)
+{
+    std::vector<Vec3> translated_pos;
+    for (unsigned i=0; i<pos.size(); i++) {
+        translated_pos.push_back(pos[i] - t);
+    }
+ return translated_pos;
+}
+
+std::vector<Vec3> shiftbyCOG(const std::vector<Vec3> pos)
+{
+   Vec3 t = calculateCOG(pos);
+   return translateCoordinates(pos, t);
+}
+
+void ReferenceCalcQuaternionForceKernel::initialize(const System& system, const QuaternionForce& force) {
     particles = force.getParticles();
     if (particles.size() == 0)
         for (int i = 0; i < system.getNumParticles(); i++)
@@ -69,113 +94,48 @@ void ReferenceCalcRMSDCVForceKernel::initialize(const System& system, const RMSD
     center /= particles.size();
     for (Vec3& p : referencePos)
         p -= center; 
+   
 }
-double ReferenceCalcRMSDCVForceKernel::calculateIxn(vector<OpenMM::Vec3>& atomCoordinates, vector<OpenMM::Vec3>& forces) const {
-    // Compute the RMSDCV and its gradient using the algorithm described in Coutsias et al,
-    // "Using quaternions to calculate RMSDCV" (doi: 10.1002/jcc.20110).  First subtract
+
+double ReferenceCalcQuaternionForceKernel::calculateIxn(vector<OpenMM::Vec3>& atomCoordinates, vector<OpenMM::Vec3>& forces) const {
+    // Compute the Quaternion and its gradient using the algorithm described in Coutsias et al,
+    // "Using quaternions to calculate Quaternion" (doi: 10.1002/jcc.20110).  First subtract
     // the centroid from the atom positions.  The reference positions have already been centered.
-     // Compute the RMSD and its gradient using the algorithm described in Coutsias et al,
-    // "Using quaternions to calculate RMSD" (doi: 10.1002/jcc.20110).  First subtract
-    // the centroid from the atom positions.  The reference positions have already been centered.
+    std::vector<Vec3> refpos, pos, centered_refpos, centered_pos;
+    //currpos1.resize(refpos1.size(), Vector);
+    for (int i : particles ){
+        refpos.push_back(referencePos[i]);
+        pos.push_back(atomCoordinates[i]);
+    }
     
+    // centering 
+    centered_refpos = shiftbyCOG(refpos);
+    centered_pos = shiftbyCOG(pos);
+    
+    // calculating q 
+    Quaternion qrot;
+    std::vector<double> normquat = {1.0, 0.0, 0.0, 0.0}; 
+    qrot.request_group2_gradients(pos.size());
+    qrot.calc_optimal_rotation(centered_refpos, centered_pos, normquat);
+    
+    // claculate forces 
+    int qidx = 0;
     int numParticles = particles.size();
-    Vec3 center;
-    for (int i : particles)
-        center += atomCoordinates[i];
-    center /= numParticles;
-    vector<Vec3> positions(numParticles);
-    for (int i = 0; i < numParticles; i++)
-        positions[i] = atomCoordinates[particles[i]]-center;
-    
-    // Compute the correlation matrix.
-    
-    double R[3][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
-    for (int i = 0; i < 3; i++)
-        for (int j = 0; j < 3; j++)
-            for (int k = 0; k < numParticles; k++) {
-                int index = particles[k];
-                R[i][j] += positions[k][i]*referencePos[index][j];
-            }
-
-    // Compute the F matrix.
-
-    Array2D<double> F(4, 4);
-    F[0][0] =  R[0][0] + R[1][1] + R[2][2];
-    F[1][0] =  R[1][2] - R[2][1];
-    F[2][0] =  R[2][0] - R[0][2];
-    F[3][0] =  R[0][1] - R[1][0];
-
-    F[0][1] =  R[1][2] - R[2][1];
-    F[1][1] =  R[0][0] - R[1][1] - R[2][2];
-    F[2][1] =  R[0][1] + R[1][0];
-    F[3][1] =  R[0][2] + R[2][0];
-
-    F[0][2] =  R[2][0] - R[0][2];
-    F[1][2] =  R[0][1] + R[1][0];
-    F[2][2] = -R[0][0] + R[1][1] - R[2][2];
-    F[3][2] =  R[1][2] + R[2][1];
-
-    F[0][3] =  R[0][1] - R[1][0];
-    F[1][3] =  R[0][2] + R[2][0];
-    F[2][3] =  R[1][2] + R[2][1];
-    F[3][3] = -R[0][0] - R[1][1] + R[2][2];
-
-    // Find the maximum eigenvalue and eigenvector.
-
-    JAMA::Eigenvalue<double> eigen(F);
-    Array1D<double> values;
-    eigen.getRealEigenvalues(values);
-    Array2D<double> vectors;
-    eigen.getV(vectors);
-
-    // Compute the RMSD.
-    
-    double sum = 0.0;
-    for (int i = 0; i < numParticles; i++) {
-        int index = particles[i];
-        sum += positions[i].dot(positions[i]) + referencePos[index].dot(referencePos[index]);
-    }
-    double msd = (sum-2*values[3])/numParticles;
-    if (msd < 1e-20) {
-        // The particles are perfectly aligned, so all the forces should be zero.
-        // Numerical error can lead to NaNs, so just return 0 now.
-        return 0.0;
-    }
-    double rmsd = sqrt(msd);
-
-    // Compute the rotation matrix.
-
-    double q[] = {vectors[0][3], vectors[1][3], vectors[2][3], vectors[3][3]};
-    double q00 = q[0]*q[0], q01 = q[0]*q[1], q02 = q[0]*q[2], q03 = q[0]*q[3];
-    double q11 = q[1]*q[1], q12 = q[1]*q[2], q13 = q[1]*q[3];
-    double q22 = q[2]*q[2], q23 = q[2]*q[3];
-    double q33 = q[3]*q[3];
-    double U[3][3] = {{q00+q11-q22-q33, 2*(q12-q03), 2*(q13+q02)},
-                      {2*(q12+q03), q00-q11+q22-q33, 2*(q23-q01)},
-                      {2*(q13-q02), 2*(q23+q01), q00-q11-q22+q33}};
-
-    // Rotate the reference positions and compute the forces.
-    
-    for (int i = 0; i < numParticles; i++) {
-        const Vec3& p = referencePos[particles[i]];
-        Vec3 rotatedRef(U[0][0]*p[0] + U[1][0]*p[1] + U[2][0]*p[2],
-                        U[0][1]*p[0] + U[1][1]*p[1] + U[2][1]*p[2],
-                        U[0][2]*p[0] + U[1][2]*p[1] + U[2][2]*p[2]);
-        forces[particles[i]] -= (positions[i]-rotatedRef) / (rmsd*numParticles);
-    }
-    return rmsd;
+    for (int i = 0; i < numParticles; i++) 
+        forces[particles[i]] += qrot.dQ0_2[i][qidx] * 1/numParticles; 
+        
+    return qrot.q0;
 }
 
 
+double ReferenceCalcQuaternionForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy) {
 
-double ReferenceCalcRMSDCVForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy) {
-    // vector<RealVec>& pos = extractPositions(context);
     vector<Vec3>& posData = extractPositions(context);
     vector<Vec3>& forceData = extractForces(context);
     return calculateIxn(posData, forceData);
 }
 
-void ReferenceCalcRMSDCVForceKernel::copyParametersToContext(ContextImpl& context, const RMSDCVForce& force) {
+void ReferenceCalcQuaternionForceKernel::copyParametersToContext(ContextImpl& context, const QuaternionForce& force) {
     if (referencePos.size() != force.getReferencePositions().size())
         throw OpenMMException("updateParametersInContext: The number of reference positions has changed");
     particles = force.getParticles();
